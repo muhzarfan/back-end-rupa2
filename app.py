@@ -1,89 +1,103 @@
 from flask import Flask, request, jsonify
-import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing import image
 import numpy as np
 from PIL import Image
 import io
-import os
 from flask_cors import CORS
+import tensorflow as tf
 
 app = Flask(__name__)
-
 CORS(app)
 
-# kelas klasifikasi model
+# Konfigurasi
+MODEL_PATH = 'model/furniture_model.h5'
+IMAGE_SIZE = (128, 128)  # Ubah sesuai dengan training model Anda
 CLASSES = ['bed', 'chair', 'sofa', 'swivelchair', 'table']
 
-# load model
-def load_model():
+def load_furniture_model():
+    """Load model h5"""
     try:
-        model = tf.keras.models.load_model('model/furniture_model.keras')
-        print("Model berhasil dimuat!")
+        model = load_model(MODEL_PATH)
+        print("Model berhasil dimuat")
+        # Print model architecture
+        model.summary()
         return model
     except Exception as e:
         print(f"Error loading model: {str(e)}")
         return None
 
-model = load_model()
+def prepare_image(img):
+    """Prepare image for prediction"""
+    # Convert ke RGB jika perlu
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    # Resize image
+    img = img.resize(IMAGE_SIZE)
+    
+    # Convert ke array
+    img_array = image.img_to_array(img)
+    
+    # Normalisasi
+    img_array = img_array / 255.0
+    
+    # Add batch dimension
+    img_array = np.expand_dims(img_array, axis=0)
+    
+    return img_array
 
-def preprocess_image(image):
-    try:
-        # konversi ke RGB
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-            
-        # ubah ukuran gambar
-        image = image.resize((224, 224))
-        
-        # konversi ke array
-        image_array = tf.keras.preprocessing.image.img_to_array(image)
-        
-        # normalisasi gambar
-        image_array = image_array / 255.0
-        
-        # dimensi batch
-        image_array = np.expand_dims(image_array, axis=0)
-        
-        print(f"Input shape: {image_array.shape}")
-        return image_array
-        
-    except Exception as e:
-        print(f"Error in preprocessing: {str(e)}")
-        raise
+# Load model saat startup
+print("Loading model...")
+model = load_furniture_model()
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image file uploaded'}), 400
-    
     try:
-        # baca file gambar
+        # Check if image is present in request
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided'}), 400
+
+        # Get image file
         file = request.files['image']
-        image = Image.open(io.BytesIO(file.read()))
         
-        # preproses gambar
-        processed_image = preprocess_image(image)
+        # Read and process image
+        img = Image.open(io.BytesIO(file.read()))
+        processed_img = prepare_image(img)
         
-        # menampilkan shape sebelum prediksi
-        print(f"Final input shape: {processed_image.shape}")
+        # Make prediction
+        predictions = model.predict(processed_img)
         
-        # prediksi
-        predictions = model.predict(processed_image)
+        # Get highest probability class
         predicted_class_index = np.argmax(predictions[0])
         predicted_class = CLASSES[predicted_class_index]
         confidence = float(predictions[0][predicted_class_index])
         
-        # hasil prediksi dalam bentuk json
-        return jsonify({
+        # Return result
+        result = {
+            'status': 'success',
             'class': predicted_class,
-            'confidence': f"{confidence * 100:.2f}%",
-            'input_shape': processed_image.shape
-        })
-    
+            'confidence': f'{confidence * 100:.2f}%',
+            'probabilities': {
+                class_name: float(prob) 
+                for class_name, prob in zip(CLASSES, predictions[0])
+            }
+        }
+        
+        return jsonify(result)
+
     except Exception as e:
         return jsonify({
+            'status': 'error',
             'error': str(e),
-            'type': str(type(e).__name__)
+            'type': type(e).__name__
         }), 500
+
+@app.route('/health', methods=['GET'])
+def health():
+    if model is None:
+        return jsonify({'status': 'error', 'message': 'Model not loaded'}), 500
+    return jsonify({'status': 'healthy', 'message': 'Service is running'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
