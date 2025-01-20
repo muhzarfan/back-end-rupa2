@@ -1,103 +1,100 @@
-from flask import Flask, request, jsonify
+import streamlit as st
+import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
-import numpy as np
 from PIL import Image
 import io
-from flask_cors import CORS
 import tensorflow as tf
-
-app = Flask(__name__)
-CORS(app)
 
 # Konfigurasi
 MODEL_PATH = 'model/furniture_model.h5'
-IMAGE_SIZE = (128, 128)  # Ubah sesuai dengan training model Anda
+IMAGE_SIZE = (128, 128)  
 CLASSES = ['bed', 'chair', 'sofa', 'swivelchair', 'table']
+
+def get_confidence_evaluation(confidence_percentage):
+    """Evaluate confidence level"""
+    if confidence_percentage >= 80:
+        return "Sangat Bagus", "🌟🌟🌟🌟🌟"
+    elif 71 <= confidence_percentage <= 80:
+        return "Bagus", "🌟🌟🌟🌟"
+    elif 61 <= confidence_percentage <= 70:
+        return "Cukup Bagus", "🌟🌟🌟"
+    elif 51 <= confidence_percentage <= 60:
+        return "Baik", "🌟🌟"
+    elif 41 <= confidence_percentage <= 50:
+        return "Buruk", "🌟"
+    else:
+        return "Sangat Buruk", "❌"
 
 def load_furniture_model():
     """Load model h5"""
     try:
         model = load_model(MODEL_PATH)
-        print("Model berhasil dimuat")
-        # Print model architecture
-        model.summary()
         return model
     except Exception as e:
-        print(f"Error loading model: {str(e)}")
+        st.error(f"Error loading model: {str(e)}")
         return None
 
 def prepare_image(img):
     """Prepare image for prediction"""
-    # Convert ke RGB jika perlu
     if img.mode != 'RGB':
         img = img.convert('RGB')
-    
-    # Resize image
     img = img.resize(IMAGE_SIZE)
-    
-    # Convert ke array
     img_array = image.img_to_array(img)
-    
-    # Normalisasi
     img_array = img_array / 255.0
-    
-    # Add batch dimension
     img_array = np.expand_dims(img_array, axis=0)
-    
     return img_array
 
 # Load model saat startup
-print("Loading model...")
+st.title("Furniture Quality Checker by ruparupa")
 model = load_furniture_model()
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    try:
-        # Check if image is present in request
-        if 'image' not in request.files:
-            return jsonify({'error': 'No image file provided'}), 400
+if model is not None:
+    uploaded_file = st.file_uploader("Upload sebuah gambar mebel:", type=["jpg", "jpeg", "png"])
 
-        # Get image file
-        file = request.files['image']
-        
-        # Read and process image
-        img = Image.open(io.BytesIO(file.read()))
-        processed_img = prepare_image(img)
-        
-        # Make prediction
-        predictions = model.predict(processed_img)
-        
-        # Get highest probability class
-        predicted_class_index = np.argmax(predictions[0])
-        predicted_class = CLASSES[predicted_class_index]
-        confidence = float(predictions[0][predicted_class_index])
-        
-        # Return result
-        result = {
-            'status': 'success',
-            'class': predicted_class,
-            'confidence': f'{confidence * 100:.2f}%',
-            'probabilities': {
-                class_name: float(prob) 
-                for class_name, prob in zip(CLASSES, predictions[0])
-            }
-        }
-        
-        return jsonify(result)
+    if uploaded_file is not None:
+        try:
+            # Read and process image
+            img = Image.open(io.BytesIO(uploaded_file.read()))
+            st.image(img, caption="Uploaded Image", use_column_width=True)
+            
+            processed_img = prepare_image(img)
+            
+            # Make prediction
+            predictions = model.predict(processed_img)
+            
+            # Get highest probability class
+            predicted_class_index = np.argmax(predictions[0])
+            predicted_class = CLASSES[predicted_class_index]
+            confidence = float(predictions[0][predicted_class_index])
+            confidence_percentage = confidence * 100
+            
+            # Get evaluation
+            evaluation, stars = get_confidence_evaluation(confidence_percentage)
+            
+            # Display results
+            st.success(f"Prediction: {predicted_class}")
+            
+            # Tampilkan confidence dengan evaluasi
+            st.write("---")
+            st.write(f"Confidence: {confidence_percentage:.2f}%")
+            st.write(f"Evaluasi: {evaluation} {stars}")
+            
+            # Tampilkan color box sesuai evaluasi
+            if confidence_percentage >= 80:
+                st.markdown(f'<div style="background-color: #28a745; padding: 10px; border-radius: 5px; color: white;">Tingkat kepercayaan sangat tinggi!</div>', unsafe_allow_html=True)
+            elif confidence_percentage < 40:
+                st.markdown(f'<div style="background-color: #dc3545; padding: 10px; border-radius: 5px; color: white;">Tingkat kepercayaan sangat rendah!</div>', unsafe_allow_html=True)
+            
+            # Display probabilities untuk semua kelas
+            st.write("---")
+            st.write("Detail Probabilities per Class:")
+            for class_name, prob in zip(CLASSES, predictions[0]):
+                prob_percentage = prob * 100
+                eval_text, eval_stars = get_confidence_evaluation(prob_percentage)
+                st.write(f"{class_name}: {prob_percentage:.2f}% - {eval_text} {eval_stars}")
 
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'error': str(e),
-            'type': type(e).__name__
-        }), 500
-
-@app.route('/health', methods=['GET'])
-def health():
-    if model is None:
-        return jsonify({'status': 'error', 'message': 'Model not loaded'}), 500
-    return jsonify({'status': 'healthy', 'message': 'Service is running'}), 200
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+        except Exception as e:
+            st.error(f"Error processing image: {str(e)}")
+else:
+    st.error("Model failed to load. Please check the model path and try again.")
