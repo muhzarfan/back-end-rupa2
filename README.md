@@ -1,6 +1,6 @@
 # BACKEND QUALITY CHECKER RUPARUPA (KLASIFIKASI JENIS MEBEL)
 
-Repository ini memaparkan project bagian backend yang memanfaatkan streamlit sebagai pengembangan website berbasis machine learning. Program ini menangani input dari user berupa gambar mebel yang nantinya dilakukan klasifikasi pada beberapa kelas seperti bed, chair, sofa, swivelchair, dan table. Program akan load model ke model klasifikasi dengan format keras(h5) bernama furniture_model.h5. Untuk hasilnya program akan menampilkan kelas terprediksi beserta akurasi dan parameter kualitas (Sangat Baik, Baik, Cukup Baik, Buruk, Sangat Buruk).
+Repository ini memaparkan project bagian backend yang memanfaatkan streamlit sebagai pengembangan website berbasis machine learning. Program ini menangani input dari user berupa gambar mebel yang nantinya dilakukan klasifikasi pada beberapa kelas seperti bed, chair, sofa, swivelchair, dan table. Program akan load model ke model klasifikasi dengan format keras(h5) bernama furniture_model.h5. Untuk hasilnya program akan menampilkan kelas terprediksi beserta akurasi dan parameter kualitas (Sangat Bagus, Bagus, Cukup Bagus, Buruk, Sangat Buruk).
 
 ## Link Deploy
 
